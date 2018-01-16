@@ -58,7 +58,7 @@ class Flickr(Directive):
 
         figure_node = nodes.figure()
         div_node = htmlnodes.div()
-        div_node['class'] = 'caption-container'
+        div_node['class'] = 'figure-container'
         target = htmlnodes.a()
         img_node = htmlnodes.img()
         caption = None
@@ -74,7 +74,7 @@ class Flickr(Directive):
             div_node['class'] = self.options['class']
 
         if 'figclass' in self.options:
-            figure_node['class'] = self.options['class']
+            figure_node['class'] = self.options['figclass']
 
         if self.content:
             node = nodes.Element()          # anonymous container for parsing

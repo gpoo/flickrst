@@ -7,8 +7,21 @@ from docutils import nodes
 from docutils.parsers.rst import directives, Directive
 
 from pelican import signals
-from flickrst import htmlnodes, flickradapter, flickr
+from flickrst import flickradapter, flickr
 
+
+default_template = """
+    <div class="{{class}}">
+      <figure class="{{figclass}}">
+        <a href="{{url}}">
+        <img alt="{{alt}}"
+             src="{{raw_url}}"
+             {% if FLICKR_REST_INCLUDE_DIMENSIONS %}width="{{width}}"
+             height="{{height}}"
+             {% endif %}/></a>
+        <figcaption>{{caption}}</figcaption>
+      </figure>
+    </div>"""
 
 logger = logging.getLogger(__name__)
 
@@ -23,7 +36,7 @@ def setup_settings(pelican):
             value = pelican.settings['FLICKR_API_' + key]
             setattr(flickr, 'API_' + key, value)
         except KeyError:
-            logger.warning('[flickreST]: FLICKR_API_%s is not defined ' +
+            logger.warning('[flickrst]: FLICKR_API_%s is not defined ' +
                            'in the configuration', key)
 
     Flickr.SETTINGS['api_client'] = flickr
@@ -32,8 +45,9 @@ def setup_settings(pelican):
         'FLICKR_REST_CACHE_LOCATION',
         '/tmp/org.calcifer.flickrest-images.cache')
     pelican.settings.setdefault('FLICKR_REST_IMAGE_SIZE', 'Medium 640')
+    pelican.settings.setdefault('FLICKR_REST_INCLUDE_DIMENSIONS', True)
 
-    for suffix in 'CACHE_LOCATION', 'IMAGE_SIZE':
+    for suffix in 'CACHE_LOCATION', 'IMAGE_SIZE', 'INCLUDE_DIMENSIONS':
         key = 'FLICKR_REST_%s' % suffix
         Flickr.SETTINGS[key] = pelican.settings[key]
 
@@ -42,7 +56,7 @@ class Flickr(Directive):
     required_arguments = 1
     optional_arguments = 0
     final_argument_whitespace = True
-    option_spec = {'title': directives.unchanged,
+    option_spec = {
                    'alt': directives.unchanged,
                    'class': directives.unchanged,
                    'figclass': directives.unchanged,
@@ -54,27 +68,22 @@ class Flickr(Directive):
     def run(self):
         """Include a file as part of the content of this reST file."""
 
+        from jinja2 import Template
+
         flickr_id = self.arguments[0]
+        template = Template(default_template)
+        options = {
+           'class': 'div-container',
+           'figclass': 'figure-container',
+           'url': 'https://flickr.com/',
+           'raw_url': None,
+           'alt': None,
+           'width': None,
+           'height': None,
+           'caption': 'caption',
+        }
 
-        figure_node = nodes.figure()
-        div_node = htmlnodes.div()
-        div_node['class'] = 'figure-container'
-        target = htmlnodes.a()
-        img_node = htmlnodes.img()
-        caption = None
-
-        for element in 'alt', 'title':
-            if element in self.options:
-                img_node[element] = self.options[element]
-
-        if 'scale' in self.options:
-            img_node['width'] = '%d%%' % self.options['scale']
-
-        if 'class' in self.options:
-            div_node['class'] = self.options['class']
-
-        if 'figclass' in self.options:
-            figure_node['class'] = self.options['figclass']
+        options.update(self.options)
 
         if self.content:
             node = nodes.Element()          # anonymous container for parsing
@@ -82,49 +91,44 @@ class Flickr(Directive):
             first_node = node[0]
 
             if isinstance(first_node, nodes.paragraph):
-                caption = htmlnodes.figcaption(first_node.rawsource, '',
-                                               *first_node.children)
-                caption.source = first_node.source
-                caption.line = first_node.line
+                options['caption'] = first_node.astext()
             elif not (isinstance(first_node, nodes.comment)
                       and len(first_node) == 0):
                 error = self.state_machine.reporter.error(
                       'Figure caption must be a paragraph or empty comment.',
                       nodes.literal_block(self.block_text, self.block_text),
                       line=self.lineno)
-                return [figure_node, error]
+                return [nodes.raw('', '', format='html'), error]
+
             if len(node) > 1:
-                caption = nodes.legend('', *node[1:])
+                text = [n.astext() for n in node[1:] if isinstance(n, nodes.paragraph)]
+                options['caption'] = ' '.join([options['caption']] + text)
+                logger.warning('[flickrst]: Text after the first ' +
+                             'paragraph is merged with the caption ' +
+                             'as one single paragraph.')
 
         if self.SETTINGS['api_client'] is None:
-            logger.error('[flickreST]: Unable to get the Flickr API object.')
-            target += img_node
-            figure_node += target
-            figure_node += caption
-            div_node += figure_node
-            # Return the placehorder for the image.
-            return [nodes.raw('', div_node, format='html')]
+            logger.error('[flickrst]: Unable to get the Flickr API object.')
+            replacement = template.render(options)
+            return [nodes.raw('', replacement, format='html')]
 
-        if 'size' in self.options:
-            self.SETTINGS['FLICKR_REST_IMAGE_SIZE'] = self.options['size']
+        if 'size' in options:
+            self.SETTINGS['FLICKR_REST_IMAGE_SIZE'] = options['size']
 
         info = flickradapter.get_photo(flickr_id, self.SETTINGS)
 
         if info:
-            img_node['src'] = info['source_url']
-            target['href'] = info['url']
+            options['raw_url'] = info['source_url']
+            options['url'] = info['url']
+            options['width'] = info['width']
+            options['height'] = info['height']
+            options['FLICKR_REST_INCLUDE_DIMENSIONS'] = self.SETTINGS['FLICKR_REST_INCLUDE_DIMENSIONS']
 
-            if 'alt' in img_node and not img_node['alt']:
-                img_node['alt'] = info['title']
-            if 'title' in img_node and not img_node['title']:
-                img_node['title'] = img_node['title'] or info['title']
+        replacement = template.render(options)
+        result = nodes.raw('', replacement, format='html') 
+        # logger.debug('[flickrst]: ' + result.astext())
 
-        target += img_node
-        figure_node += target
-        figure_node += caption
-        div_node += figure_node
-
-        return [nodes.raw('', div_node, format='html')]
+        return [result]
 
 
 def register():

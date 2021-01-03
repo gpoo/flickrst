@@ -72,10 +72,10 @@ The result will be:
 .. code-block:: html
 
     <div class="figure-container">
-      <figure>
+      <figure class="figure-container">
         <a href="https://www.flickr.com/photos/gpoo/31456067436/">
         <img alt="Together"
-        src="https://farm1.staticflickr.com/598/31456067436_08ae67c21e_z.jpg"/></a>
+             src="https://farm1.staticflickr.com/598/31456067436_08ae67c21e_z.jpg"/></a>
       </figure>
     </div>
 

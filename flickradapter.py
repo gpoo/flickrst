@@ -29,7 +29,7 @@ def get_photo(photo_id, settings):
     photo_id = int(photo_id)
 
     if api is None:
-        logger.error('[flickreST]: Unable to get the Flickr API object')
+        logger.error('[flickrst]: Unable to get the Flickr API object')
         return None
 
     tmp_file = settings['FLICKR_REST_CACHE_LOCATION']
@@ -43,14 +43,14 @@ def get_photo(photo_id, settings):
 
     # Photo not in cache? Retrieve it and store it in cache.
     if photo_id not in photo_mapping:
-        logger.info('[flickreST]: Fetching photo information for %s', photo_id)
+        logger.info('[flickrst]: Fetching photo information for %s', photo_id)
 
         photo = api.Photo(id=photo_id)
 
         try:
             sizes = {x['label']: x for x in photo.getSizes()}
         except api.FlickrError as err:
-            logger.error('[flickreST]: %s', err)
+            logger.error('[flickrst]: %s', err)
             return None
 
         photo_mapping[photo_id] = {
@@ -64,7 +64,7 @@ def get_photo(photo_id, settings):
         with open(tmp_file, 'wb') as f:
             pickle.dump(photo_mapping, f)
     else:
-        logger.info('[flickreST]: Using cached information')
+        logger.info('[flickrst]: Using cached information')
         sizes = photo_mapping[photo_id]['sizes']
 
     # Data retrieved and cache. We are ready to send it back.
